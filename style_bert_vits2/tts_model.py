@@ -174,26 +174,38 @@ class TTSModel:
     def split_text_by_punctuation_and_newlines(self, text):
         import re
 
-        words = text.split()
+        def is_english(text):
+            # Basic check: majority of characters are ASCII (a-zA-Z)
+            english_chars = sum(c.isascii() and c.isalpha() for c in text)
+            return english_chars / max(len(text), 1) > 0.5
+
         sentences = []
 
-        # First 3 words
-        sentences.append(' '.join(words[:3]))
-        # Next 5 words
-        sentences.append(' '.join(words[3:8]))
+        if is_english(text):
+            # English logic
+            words = text.split()
 
-        # Remaining text after removing first 8 words
-        remaining_text = ' '.join(words[8:])
+            # First 3 words
+            sentences.append(' '.join(words[:3]))
 
-        # Split using punctuation (Japanese, Chinese, English) or newline/comma
-        punctuation_pattern = r'(?<=[。！？、．.!?,\n])\s*'
-        chunks = [chunk.strip() for chunk in re.split(punctuation_pattern, remaining_text) if chunk.strip()]
+            # Next 5 words
+            sentences.append(' '.join(words[3:8]))
 
-        # Append the rest of the punctuation-based chunks
-        sentences.extend(chunks)
+            # Remaining text after removing the first 8 words
+            remaining_text = ' '.join(words[8:])
 
-        # Debug
-        logger.info(f"Split text into {len(sentences)} sentences: {sentences}")
+            # Split remaining using punctuation (Japanese + English + newline)
+            punctuation_pattern = r'(?<=[。！？、．.!?,\n])\s*'
+            chunks = [chunk.strip() for chunk in re.split(punctuation_pattern, remaining_text) if chunk.strip()]
+            sentences.extend(chunks)
+
+
+        else:
+            # Japanese or non-English logic: skip word slicing
+            punctuation_pattern = r'(?<=[。！？、．.!?,\n])\s*'
+            chunks = [chunk.strip() for chunk in re.split(punctuation_pattern, text) if chunk.strip()]
+            sentences.extend(chunks)
+
         return sentences
 
 
@@ -416,7 +428,13 @@ class TTSModel:
                         )
                     audio = self.__convert_to_16_bit_wav(audio)
                     yield (sr, audio)
-                    if i < 2 and i != len(texts) - 1:
+
+                    def is_english(text):
+                        # Basic check: majority of characters are ASCII (a-zA-Z)
+                        english_chars = sum(c.isascii() and c.isalpha() for c in text)
+                        return english_chars / max(len(text), 1) > 0.5
+                    
+                    if i < 2 and i != len(texts) - 1 and is_english(t):
                         silence = np.zeros(int(sr * split_interval), dtype=np.int16)
                         yield (sr, silence)
         logger.info("Audio segments generated successfully")
