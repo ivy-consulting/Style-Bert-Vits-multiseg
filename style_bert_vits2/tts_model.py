@@ -434,7 +434,10 @@ class TTSModel:
                         english_chars = sum(c.isascii() and c.isalpha() for c in text)
                         return english_chars / max(len(text), 1) > 0.5
                     
-                    if i < 2 and i != len(texts) - 1 and is_english(t):
+                    if i >= 2 and i != len(texts) - 1 and is_english(t):
+                        silence = np.zeros(int(sr * split_interval), dtype=np.int16)
+                        yield (sr, silence)
+                    elif not is_english(t) and i != len(texts) - 1:
                         silence = np.zeros(int(sr * split_interval), dtype=np.int16)
                         yield (sr, silence)
         logger.info("Audio segments generated successfully")
