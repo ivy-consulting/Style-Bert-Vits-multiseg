@@ -416,7 +416,7 @@ class TTSModel:
                         )
                     audio = self.__convert_to_16_bit_wav(audio)
                     yield (sr, audio)
-                    if i != len(texts) - 1:
+                    if i < 2 and i != len(texts) - 1:
                         silence = np.zeros(int(sr * split_interval), dtype=np.int16)
                         yield (sr, silence)
         logger.info("Audio segments generated successfully")
