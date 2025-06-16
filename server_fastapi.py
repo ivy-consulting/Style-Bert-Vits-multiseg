@@ -464,5 +464,5 @@ if __name__ == "__main__":
         f"Input text length limit: {limit}. You can change it in server.limit in config.yml"
     )
     uvicorn.run(
-        app, port=config.server_config.port, host="0.0.0.0", log_level="warning"
+        app, port=config.server_config.port, host="0.0.0.0", log_level="debug"
     )
