@@ -16,6 +16,7 @@ from style_bert_vits2.logging import logger
 from style_bert_vits2.nlp.japanese.pyopenjtalk_worker.worker_client import WorkerClient
 from style_bert_vits2.nlp.japanese.pyopenjtalk_worker.worker_common import ConnectionClosedException, WORKER_PORT
 
+# Declare global variables at module level
 WORKER_CLIENT: Optional[WorkerClient] = None
 WORKER_CLIENT_LOCK = threading.Lock()
 MAX_RETRIES = 3
@@ -80,6 +81,7 @@ def start_worker_server(port: int) -> None:
 
 def dispatch_with_retry(method: str, *args: Any) -> Any:
     """Dispatch a request to the worker with retry logic."""
+    global WORKER_CLIENT
     with WORKER_CLIENT_LOCK:
         if WORKER_CLIENT is None:
             initialize_worker()
@@ -92,7 +94,6 @@ def dispatch_with_retry(method: str, *args: Any) -> Any:
             except (ConnectionClosedException, ValueError, socket.timeout) as e:
                 logger.error("Dispatch failed for method %s (attempt %d/%d): %s", method, attempt + 1, MAX_RETRIES, e)
                 if attempt < MAX_RETRIES - 1:
-                    global WORKER_CLIENT
                     WORKER_CLIENT = None
                     time.sleep(RETRY_DELAY)
                     initialize_worker()
@@ -146,8 +147,8 @@ def unset_user_dict() -> None:
 
 def terminate_worker() -> None:
     """Terminate the pyopenjtalk worker server."""
-    logger.debug("Terminating pyopenjtalk worker server")
     global WORKER_CLIENT
+    logger.debug("Terminating pyopenjtalk worker server")
     with WORKER_CLIENT_LOCK:
         if not WORKER_CLIENT:
             return
