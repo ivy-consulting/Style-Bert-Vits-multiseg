@@ -89,7 +89,7 @@ def dispatch_with_retry(method: str, *args: Any) -> Any:
         for attempt in range(MAX_RETRIES):
             try:
                 response = WORKER_CLIENT.dispatch_pyopenjtalk(method, *args)
-                logger.debug("Dispatch successful for method %s", method)
+                # logger.debug("Dispatch successful for method %s", method)
                 return response
             except (ConnectionClosedException, ValueError, socket.timeout) as e:
                 logger.error("Dispatch failed for method %s (attempt %d/%d): %s", method, attempt + 1, MAX_RETRIES, e)
