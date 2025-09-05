@@ -195,14 +195,14 @@ class TTSModel:
             remaining_text = ' '.join(words[8:])
 
             # Split remaining using punctuation (Japanese + English + newline)
-            punctuation_pattern = r'(?<=[。！？．.!?\n])\s*'
+            punctuation_pattern = r'(?:(?<=\.)(?<!\d\.)|(?<=[!?。！？．]))(?=\s|$)'
             chunks = [chunk.strip() for chunk in re.split(punctuation_pattern, remaining_text) if chunk.strip()]
             sentences.extend(chunks)
 
 
         else:
             # Japanese or non-English logic: skip word slicing
-            punctuation_pattern = r'(?<=[。！？.!？?\n])\s*'
+            punctuation_pattern = r'(?<=[。！？!？?\n])\s*'
             chunks = [chunk.strip() for chunk in re.split(punctuation_pattern, text) if chunk.strip()]
             sentences.extend(chunks)
 
