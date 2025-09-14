@@ -42,6 +42,6 @@ print("Japanese:")
 print(split_text_by_punctuation_and_newlines(jp_text))
 
 # === Test with English ===
-en_text = "Today is a beautiful day. The sun is shining, the sky is blue, and the air is fresh. I went for a walk in the park. It was very peaceful and relaxing. we got 3.3 million dollars. yay, i like her and she got 2.2/10 isnt it creazy?"
+en_text = "Today is a beautiful day・ The sun is shining, the sky is blue, and the air is fresh. I went for a walk in the park. It was very peaceful and relaxing. we got 3.3 million dollars. yay, i like her and she got 2.2/10 isnt it creazy?"
 print("\nEnglish:")
 print(split_text_by_punctuation_and_newlines(en_text))

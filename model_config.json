@@ -69,6 +69,11 @@
       "model_path": "model_assets/tts-english-hd/improved-model.safetensors",
       "config_path": "model_assets/tts-english-hd/config.json",
       "style_vec_path": "model_assets/tts-english-hd/style_vectors.npy"
+    },
+    "tts-japanese-male": {
+      "model_path": "model_assets/tts-japanese-male/male-ja_e30_s11190.safetensors",
+      "config_path": "model_assets/tts-japanese-male/config.json",
+      "style_vec_path": "model_assets/tts-japanese-male/style_vectors.npy"
     }
   }
 }
