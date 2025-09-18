@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CORS Audio Test</title>
+</head>
+<body>
+  <h2>CORS Audio Test Page</h2>
+  <button id="fetchBtn">Fetch Audio</button>
+  <div id="status"></div>
+  <br>
+  <audio id="audioPlayer" controls style="display:none;"></audio>
+
+  <script>
+    document.getElementById("fetchBtn").addEventListener("click", () => {
+      const statusBox = document.getElementById("status");
+      statusBox.textContent = "Fetching audio...";
+
+      const url = "https://api.tts-test.lumina-live-j.com/voice" +
+        "?text=また、医療業界は常に進歩している分野であり、最新の医学知識や技術に触れながら、専門性を高めていくことができます！" +
+        "&model_id=14" +
+        "&speaker_name=male-ja" +
+        "&speaker_id=0" +
+        "&sdp_ratio=0.2" +
+        "&noise=0.6" +
+        "&noisew=0.8" +
+        "&length=0.8" +
+        "&language=JP" +
+        "&auto_split=true" +
+        "&split_interval=0.5" +
+        "&assist_text_weight=1" +
+        "&style=Neutral" +
+        "&style_weight=5" +
+        "&pitch_scale=1" +
+        "&intonation_scale=1";
+
+      fetch(url, {
+        method: "GET",
+        headers: {
+          "X-Service-Name": "ruby-service",
+          "X-Signature": "c9fcbe44e4ef8525ee5b1f60e5bf53574cd809503c5b82c72194fcc58b0fd5e2"
+        }
+      })
+      .then(response => {
+        statusBox.textContent = "Response status: " + response.status;
+        if (!response.ok) throw new Error("HTTP error " + response.status);
+        return response.blob();
+      })
+      .then(blob => {
+        const audioUrl = URL.createObjectURL(blob);
+        const audioPlayer = document.getElementById("audioPlayer");
+        audioPlayer.src = audioUrl;
+        audioPlayer.style.display = "block";
+        statusBox.textContent += " ✅ Audio ready, click Play.";
+      })
+      .catch(err => {
+        statusBox.textContent = "Fetch error: " + err;
+      });
+    });
+  </script>
+</body>
+</html>

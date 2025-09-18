@@ -408,6 +408,12 @@ if __name__ == "__main__":
         load_models(model_holder)
         return get_loaded_models_info()
 
+    @app.get("/health")
+    def health():
+        """Lightweight container health check."""
+        return {"status": "ok", "timestamp": time.time()}
+
+
     @app.get("/status")
     def get_status():
         """実行環境のステータスを取得"""
