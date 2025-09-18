@@ -57,6 +57,21 @@ pyopenjtalk.initialize_worker()
 
 # dict_data/ 以下の辞書データを pyopenjtalk に適用
 update_dict()
+# --- vram_clean.py (or inline in your server) ---
+import gc, os
+try:
+    import torch
+except Exception:
+    torch = None
+
+CLEAN_AFTER_INFER = os.getenv("CLEAN_AFTER_INFER", "1") == "1"
+
+def flush_vram():
+    gc.collect()
+    if torch and torch.cuda.is_available():
+        # no synchronize here—just free what the allocator can release
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
 
 # 事前に BERT モデル/トークナイザーをロードしておく
 ## ここでロードしなくても必要になった際に自動ロードされるが、時間がかかるため事前にロードしておいた方が体験が良い
@@ -358,28 +373,33 @@ if __name__ == "__main__":
         assert style is not None
         if encoding is not None:
             text = unquote(text, encoding=encoding)
-
-        return StreamingResponse(
-            generate_wav_segments(
-                model=model,
-                text=text,
-                language=language,
-                speaker_id=speaker_id,
-                reference_audio_path=reference_audio_path,
-                sdp_ratio=sdp_ratio,
-                noise=noise,
-                noisew=noisew,
-                length=length,
-                auto_split=auto_split,
-                split_interval=split_interval,
-                assist_text=assist_text,
-                assist_text_weight=assist_text_weight,
-                style=style,
-                style_weight=style_weight,
-                improved_split=improved_split,
-            ),
-            media_type="audio/wav",
-        )
+        try:
+            return StreamingResponse(
+                generate_wav_segments(
+                    model=model,
+                    text=text,
+                    language=language,
+                    speaker_id=speaker_id,
+                    reference_audio_path=reference_audio_path,
+                    sdp_ratio=sdp_ratio,
+                    noise=noise,
+                    noisew=noisew,
+                    length=length,
+                    auto_split=auto_split,
+                    split_interval=split_interval,
+                    assist_text=assist_text,
+                    assist_text_weight=assist_text_weight,
+                    style=style,
+                    style_weight=style_weight,
+                    improved_split=improved_split,
+                ),
+                media_type="audio/wav",
+            )
+        except Exception as e:
+            logger.error(e)
+            raise HTTPException(status_code=500, detail=f"Failed to generate audio: {e}")
+        finally:
+            flush_vram()
 
     @app.post("/g2p")
     def g2p(text: str):
