@@ -35,7 +35,7 @@ else:
     device_idx = -1
 
 
-THAI_TTS_CKPT_DIR = os.getenv("THAI_TTS_CKPT_DIR", "checkpoints_mms_thai")
+THAI_TTS_CKPT_DIR = "samiabbb/thai-tts-model"
 thai_tts_pipe = None
 
 from config import get_config
