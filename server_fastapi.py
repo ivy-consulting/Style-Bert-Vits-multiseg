@@ -465,24 +465,24 @@ if __name__ == "__main__":
         """
         try:
             body = await request.json()
-        except Exception:
-            return JSONResponse(status_code=400, content={"message": "Invalid JSON body"})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Invalid json body: {e}")
 
         text = (body.get("text") or "").strip()
         if not text:
-            return JSONResponse(status_code=400, content={"message": 'Missing "text"'})
+            raise HTTPException(status_code=400, detail='Missing "text"')
 
         try:
             pipe = get_thai_tts_pipe()
             out = pipe(text)
         except Exception as e:
             print("Thai TTS inference failed")
-            return JSONResponse(status_code=500, content={"message": "TTS inference error", "Exception": str(e)})
+            raise HTTPException(status_code=500, detail=f"TTS inference error: {e}")
 
         audio = out.get("audio")
         sr = out.get("sampling_rate")
         if audio is None or sr is None:
-            return JSONResponse(status_code=500, content={"message": "TTS output missing audio or sampling_rate"})
+            raise HTTPException(status_code=500, detail="TTS output missing audio or sampling_rate")
 
         if isinstance(audio, np.ndarray):
             audio = audio.squeeze()
@@ -492,7 +492,7 @@ if __name__ == "__main__":
             sf.write(buf, audio, int(sr), format="wav", subtype="PCM_16")
         except Exception as e:
             print("Failed to serialize WAV")
-            return JSONResponse(status_code=500, content={"message": "Failed to write WAV", "Exception": str(e)})
+            raise HTTPException(status_code=500, detail=f"Failed to write WAV: {e}")
 
         buf.seek(0)
         return StreamingResponse(
