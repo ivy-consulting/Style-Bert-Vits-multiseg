@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, Optional, Generator
 from urllib.parse import unquote
 import time
+import numpy as np
+import soundfile as sf
 
 import GPUtil
 import psutil
