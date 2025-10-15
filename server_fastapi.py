@@ -24,6 +24,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from scipy.io import wavfile
 
+from transformers import pipeline as hf_pipeline
+
+import torch
+if torch.cuda.is_available():
+    device = "cuda"
+    device_idx = 0
+else:
+    device = "cpu"
+    device_idx = -1
+
+
+THAI_TTS_CKPT_DIR = os.getenv("THAI_TTS_CKPT_DIR", "checkpoints_mms_thai")
+thai_tts_pipe = None
+
 from config import get_config
 from style_bert_vits2.constants import (
     DEFAULT_ASSIST_TEXT_WEIGHT,
@@ -132,7 +146,12 @@ loaded_models: list[TTSModel] = []
 class AudioResponse(Response):
     media_type = "audio/wav"
 
-
+def get_thai_tts_pipe():
+    global thai_tts_pipe
+    if thai_tts_pipe is None:
+        thai_tts_pipe = hf_pipeline("text-to-speech", model=THAI_TTS_CKPT_DIR, device=device_idx)
+        print(f"✅ Thai TTS pipeline initialized with model: {THAI_TTS_CKPT_DIR} on device: {device}")
+    return thai_tts_pipe
 
 def load_models(model_holder: TTSModelHolder):
     for model_name, paths in model_holder.model_files_dict.items():
@@ -432,6 +451,55 @@ if __name__ == "__main__":
     def health():
         """Lightweight container health check."""
         return {"status": "ok", "timestamp": time.time()}
+
+    @app.post("/thai-tts")
+    async def thai_tts(request: Request):
+        """
+        POST /thai-tts
+        Body:
+        {
+        "text": "สวัสดีครับ ยินดีที่ได้พบคุณ"
+        }
+
+        Returns: audio/wav stream
+        """
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse(status_code=400, content={"message": "Invalid JSON body"})
+
+        text = (body.get("text") or "").strip()
+        if not text:
+            return JSONResponse(status_code=400, content={"message": 'Missing "text"'})
+
+        try:
+            pipe = get_thai_tts_pipe()
+            out = pipe(text)
+        except Exception as e:
+            print("Thai TTS inference failed")
+            return JSONResponse(status_code=500, content={"message": "TTS inference error", "Exception": str(e)})
+
+        audio = out.get("audio")
+        sr = out.get("sampling_rate")
+        if audio is None or sr is None:
+            return JSONResponse(status_code=500, content={"message": "TTS output missing audio or sampling_rate"})
+
+        if isinstance(audio, np.ndarray):
+            audio = audio.squeeze()
+
+        buf = BytesIO()
+        try:
+            sf.write(buf, audio, int(sr), format="wav", subtype="PCM_16")
+        except Exception as e:
+            print("Failed to serialize WAV")
+            return JSONResponse(status_code=500, content={"message": "Failed to write WAV", "Exception": str(e)})
+
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="audio/wav",
+            headers={"Content-Disposition": 'attachment; filename="thai_tts.wav"'}
+        )
 
 
     @app.get("/status")
