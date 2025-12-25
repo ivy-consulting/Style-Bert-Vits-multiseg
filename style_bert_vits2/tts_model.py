@@ -1,3 +1,4 @@
+from math import log
 from pathlib import Path
 from typing import Any, Optional, Union
 import json
@@ -444,8 +445,33 @@ class TTSModel:
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
         elif line_split and not improved_split:
-            texts = text.split("\n")
-            texts = [t for t in texts if t != ""]
+            # 1. Primary Split: Respect the user's request to split by Newlines
+            raw_texts = text.split("\n")
+            texts = []
+
+            # Ensure you have your limit defined (e.g., from config or a constant)
+            # You might need to access config.server_config.limit or set a default like 100
+            MAX_CHAR_LIMIT = 100 
+
+            for t in raw_texts:
+                t = t.strip()
+                if not t:
+                    continue
+
+                # 2. Safety Check: Is this specific line still too huge?
+                if len(t) > MAX_CHAR_LIMIT:
+                    logger.warning(f"Line too long ({len(t)} chars). Applying force split.")
+                    
+                    # Pass ONLY this long line to the robust splitter
+                    # It will handle the iterative chopping for us
+                    safety_chunks = self.split_text_by_punctuation_and_newlines(t, max_len=MAX_CHAR_LIMIT)
+                    texts.extend(safety_chunks)
+                else:
+                    # Line is safe, add it directly
+                    texts.append(t)
+                    
+            logger.info(f"use the line split set to true and not improved_split")
+            logger.info(f"we have {len(texts)} texts and the texts are {texts}")
             audios = []
             with torch.no_grad():
                 for i, t in enumerate(texts):
