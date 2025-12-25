@@ -236,6 +236,13 @@ class TTSModel:
             )
         return data
 
+    def __clear_gpu_cache(self) -> None:
+        """
+        Clear the GPU memory cache to prevent OOM errors during multi-segment inference.
+        """
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     def infer(
         self,
         text: str,
@@ -338,6 +345,7 @@ class TTSModel:
                     )
                 audio = self.__convert_to_16_bit_wav(audio)
                 yield (sr, audio)
+                self.__clear_gpu_cache()
         elif line_split and not improved_split:
             texts = text.split("\n")
             texts = [t for t in texts if t != ""]
@@ -361,6 +369,7 @@ class TTSModel:
                             style_vec=style_vector,
                         )
                     )
+                    self.__clear_gpu_cache()
                     if i != len(texts) - 1:
                         audios.append(np.zeros(int(44100 * split_interval)))
                 audio = np.concatenate(audios)
@@ -374,6 +383,7 @@ class TTSModel:
                 
                 audio = self.__convert_to_16_bit_wav(audio)
                 yield (sr, audio)
+                self.__clear_gpu_cache()
         # logger.info("Audio data generated successfully")
         # if not (pitch_scale == 1.0 and intonation_scale == 1.0):
         #     _, audio = adjust_voice(
@@ -416,6 +426,7 @@ class TTSModel:
                         )
                     audio = self.__convert_to_16_bit_wav(audio)
                     yield (sr, audio)
+                    self.__clear_gpu_cache()
                     if i != len(texts) - 1:
                         silence = np.zeros(int(sr * split_interval), dtype=np.int16)
                         yield (sr, silence)
