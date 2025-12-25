@@ -171,43 +171,110 @@ class TTSModel:
         xvec = mean + (xvec - mean) * weight
         return xvec
     
-    def split_text_by_punctuation_and_newlines(self, text):
+    def split_text_by_punctuation_and_newlines(self, text, max_len=150):
         import re
+        # Ensure logger is available if not imported globally
 
         def is_english(text):
             # Basic check: majority of characters are ASCII (a-zA-Z)
             english_chars = sum(c.isascii() and c.isalpha() for c in text)
             return english_chars / max(len(text), 1) > 0.5
 
+        def recursive_split(chunk, limit):
+            chunk = chunk.strip()
+            if not chunk:
+                return []
+            
+            if len(chunk) <= limit:
+                return [chunk]
+            
+            # 1. Try splitting by comma or major pause marks (Japanese/English)
+            # This regex splits by comma but keeps the comma attached to the preceding text
+            sub_chunks = re.split(r'((?<=[,、;；])\s*)', chunk)
+            
+            # Reconstruct chunks while respecting the limit
+            new_chunks = []
+            current_seg = ""
+            
+            for sub in sub_chunks:
+                if not sub: continue
+                # If adding the next piece exceeds limit, push current_seg and start new
+                if len(current_seg) + len(sub) > limit:
+                    if current_seg.strip():
+                        new_chunks.append(current_seg.strip())
+                    current_seg = sub
+                else:
+                    current_seg += sub
+            
+            if current_seg.strip():
+                new_chunks.append(current_seg.strip())
+
+            # 2. Safety Pass: Check if any sub-chunk is STILL too long (e.g. no commas)
+            final_chunks = []
+            for c in new_chunks:
+                c = c.strip()
+                if len(c) <= limit:
+                    final_chunks.append(c)
+                else:
+                    # Hard split or space split fallback
+                    while len(c) > limit:
+                        # Try to find the last space within the limit
+                        cut_idx = c.rfind(' ', 0, limit)
+                        
+                        # If no space found (cut_idx == -1) or space is at very start (0), force hard split
+                        if cut_idx <= 0:
+                            cut_idx = limit
+                        
+                        segment = c[:cut_idx].strip()
+                        if segment:
+                            final_chunks.append(segment)
+                        
+                        # Prepare remainder for next iteration
+                        c = c[cut_idx:].strip()
+                        
+                    if c:
+                        final_chunks.append(c)
+            
+            return final_chunks
+
         sentences = []
 
         if is_english(text):
-            # English logic
             words = text.split()
+            if len(words) <= 8:
+                sentences.append(text)
+            else:
+                # First 3 words
+                p1 = ' '.join(words[:3])
+                if p1: sentences.append(p1)
 
-            # First 3 words
-            sentences.append(' '.join(words[:3]))
+                # Next 5 words
+                p2 = ' '.join(words[3:8])
+                if p2: sentences.append(p2)
 
-            # Next 5 words
-            sentences.append(' '.join(words[3:8]))
-
-            # Remaining text after removing the first 8 words
-            remaining_text = ' '.join(words[8:])
-
-            # Split remaining using punctuation (Japanese + English + newline)
-            punctuation_pattern = r'(?:(?<=\.)(?<!\d\.)|(?<=[!?。！？．]))(?=\s|$)'
-            chunks = [chunk.strip() for chunk in re.split(punctuation_pattern, remaining_text) if chunk.strip()]
-            sentences.extend(chunks)
-
-
+                # Remaining text
+                remaining_text = ' '.join(words[8:])
+                
+                # Split remaining by standard punctuation
+                punctuation_pattern = r'(?:(?<=\.)(?<!\d\.)|(?<=[!?。！？．]))(?=\s|$)'
+                chunks = [chunk.strip() for chunk in re.split(punctuation_pattern, remaining_text) if chunk.strip()]
+                sentences.extend(chunks)
         else:
-            # Japanese or non-English logic: skip word slicing
+            # Japanese / Non-English logic
             punctuation_pattern = r'(?<=[。！？!？?\n])\s*'
             chunks = [chunk.strip() for chunk in re.split(punctuation_pattern, text) if chunk.strip()]
             sentences.extend(chunks)
 
-        return sentences
+        # --- FINAL PASS: Force-split any huge segments that survived ---
+        safe_sentences = []
+        for s in sentences:
+            safe_sentences.extend(recursive_split(s, max_len))
 
+        # Filter empty strings one last time
+        safe_sentences = [s for s in safe_sentences if s.strip()]
+
+        logger.debug(f"Split text into {len(safe_sentences)} segments.")
+        return safe_sentences
 
 
 
@@ -350,6 +417,9 @@ class TTSModel:
                     )
                 audio = self.__convert_to_16_bit_wav(audio)
                 yield (sr, audio)
+                # 4. CRITICAL FIX: Release memory after every segment
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
         elif line_split and not improved_split:
             texts = text.split("\n")
             texts = [t for t in texts if t != ""]
@@ -386,6 +456,9 @@ class TTSModel:
                 
                 audio = self.__convert_to_16_bit_wav(audio)
                 yield (sr, audio)
+                # 4. CRITICAL FIX: Release memory after every segment
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
         # logger.info("Audio data generated successfully")
         # if not (pitch_scale == 1.0 and intonation_scale == 1.0):
         #     _, audio = adjust_voice(
@@ -428,6 +501,10 @@ class TTSModel:
                         )
                     audio = self.__convert_to_16_bit_wav(audio)
                     yield (sr, audio)
+
+                    # 4. CRITICAL FIX: Release memory after every segment
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
 
                     def is_english(text):
                         # Basic check: majority of characters are ASCII (a-zA-Z)
