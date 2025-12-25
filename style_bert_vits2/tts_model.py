@@ -177,105 +177,128 @@ class TTSModel:
 
         def is_english(text):
             # Basic check: majority of characters are ASCII (a-zA-Z)
+            # Avoid division by zero
+            if len(text) == 0: return False
             english_chars = sum(c.isascii() and c.isalpha() for c in text)
-            return english_chars / max(len(text), 1) > 0.5
+            return english_chars / len(text) > 0.5
 
-        def recursive_split(chunk, limit):
-            chunk = chunk.strip()
-            if not chunk:
-                return []
-            
-            if len(chunk) <= limit:
-                return [chunk]
-            
-            # 1. Try splitting by comma or major pause marks (Japanese/English)
-            # This regex splits by comma but keeps the comma attached to the preceding text
-            sub_chunks = re.split(r'((?<=[,、;；])\s*)', chunk)
-            
-            # Reconstruct chunks while respecting the limit
-            new_chunks = []
-            current_seg = ""
-            
-            for sub in sub_chunks:
-                if not sub: continue
-                # If adding the next piece exceeds limit, push current_seg and start new
-                if len(current_seg) + len(sub) > limit:
-                    if current_seg.strip():
-                        new_chunks.append(current_seg.strip())
-                    current_seg = sub
-                else:
-                    current_seg += sub
-            
-            if current_seg.strip():
-                new_chunks.append(current_seg.strip())
-
-            # 2. Safety Pass: Check if any sub-chunk is STILL too long (e.g. no commas)
-            final_chunks = []
-            for c in new_chunks:
-                c = c.strip()
-                if len(c) <= limit:
-                    final_chunks.append(c)
-                else:
-                    # Hard split or space split fallback
-                    while len(c) > limit:
-                        # Try to find the last space within the limit
-                        cut_idx = c.rfind(' ', 0, limit)
-                        
-                        # If no space found (cut_idx == -1) or space is at very start (0), force hard split
-                        if cut_idx <= 0:
-                            cut_idx = limit
-                        
-                        segment = c[:cut_idx].strip()
-                        if segment:
-                            final_chunks.append(segment)
-                        
-                        # Prepare remainder for next iteration
-                        c = c[cut_idx:].strip()
-                        
-                    if c:
-                        final_chunks.append(c)
-            
-            return final_chunks
-
-        sentences = []
+        # --- Phase 1: Initial Rough Split (Semantic/Punctuation) ---
+        rough_sentences = []
 
         if is_english(text):
             words = text.split()
             if len(words) <= 8:
-                sentences.append(text)
+                rough_sentences.append(text)
             else:
-                # First 3 words
+                # Specific logic: First 3 words, then Next 5 words
                 p1 = ' '.join(words[:3])
-                if p1: sentences.append(p1)
+                if p1: rough_sentences.append(p1)
 
-                # Next 5 words
                 p2 = ' '.join(words[3:8])
-                if p2: sentences.append(p2)
+                if p2: rough_sentences.append(p2)
 
-                # Remaining text
+                # Remaining text split by standard punctuation
                 remaining_text = ' '.join(words[8:])
-                
-                # Split remaining by standard punctuation
                 punctuation_pattern = r'(?:(?<=\.)(?<!\d\.)|(?<=[!?。！？．]))(?=\s|$)'
                 chunks = [chunk.strip() for chunk in re.split(punctuation_pattern, remaining_text) if chunk.strip()]
-                sentences.extend(chunks)
+                rough_sentences.extend(chunks)
         else:
-            # Japanese / Non-English logic
+            # Japanese / Non-English logic: Split by sentence ending punctuation
             punctuation_pattern = r'(?<=[。！？!？?\n])\s*'
             chunks = [chunk.strip() for chunk in re.split(punctuation_pattern, text) if chunk.strip()]
-            sentences.extend(chunks)
+            rough_sentences.extend(chunks)
 
-        # --- FINAL PASS: Force-split any huge segments that survived ---
-        safe_sentences = []
-        for s in sentences:
-            safe_sentences.extend(recursive_split(s, max_len))
+        # --- Phase 2: Length Enforcement (Iterative, No Recursion) ---
+        final_sentences = []
+
+        for segment in rough_sentences:
+            segment = segment.strip()
+            if not segment:
+                continue
+
+            # If the segment is already short enough, keep it
+            if len(segment) <= max_len:
+                final_sentences.append(segment)
+                continue
+
+            # --- Processing Large Segment ---
+            # Step A: Split by Commas/Pauses first to find natural breaks
+            comma_split_pattern = r'((?<=[,、;；])\s*)'
+            raw_sub_parts = re.split(comma_split_pattern, segment)
+            
+            # Step B: Recombine comma parts into chunks that fit within max_len
+            medium_chunks = []
+            current_buffer = ""
+            
+            for part in raw_sub_parts:
+                if not part: continue
+                
+                # Check if adding this part exceeds the limit
+                if len(current_buffer) + len(part) > max_len:
+                    if current_buffer.strip():
+                        medium_chunks.append(current_buffer.strip())
+                    current_buffer = part
+                else:
+                    current_buffer += part
+            
+            if current_buffer.strip():
+                medium_chunks.append(current_buffer.strip())
+
+            # Step C: Final Safety Pass (Hard Chop)
+            # If comma splitting wasn't enough (or no commas existed), we force split by length
+            processed_sub_segments = []
+            
+            for chunk in medium_chunks:
+                chunk = chunk.strip()
+                if len(chunk) <= max_len:
+                    processed_sub_segments.append(chunk)
+                else:
+                    # Iterate through the chunk to chop it up
+                    # We use a cursor approach to avoid recursion or 'while' if strictly preferring 'for' logic
+                    # A robust way to chop strings iteratively:
+                    cursor = 0
+                    chunk_len = len(chunk)
+                    
+                    # We loop enough times to cover the length
+                    # (chunk_len // max_len + 2) ensures we cover everything
+                    for _ in range((chunk_len // max_len) + 2):
+                        if cursor >= chunk_len:
+                            break
+                            
+                        # Define the hard cut window
+                        end_idx = min(cursor + max_len, chunk_len)
+                        
+                        # Just take the slice
+                        slice_candidate = chunk[cursor:end_idx]
+                        
+                        # If we are not at the very end, try to find a space to cut cleanly
+                        if end_idx < chunk_len:
+                            # Look for space in the last 20% of the slice or just use max_len
+                            # rfind returns -1 if not found
+                            space_idx = slice_candidate.rfind(' ')
+                            
+                            if space_idx > 0:
+                                # We found a space, cut there
+                                actual_cut_len = space_idx
+                                final_piece = slice_candidate[:actual_cut_len]
+                                processed_sub_segments.append(final_piece.strip())
+                                cursor += actual_cut_len + 1 # +1 to skip the space
+                                continue
+                        
+                        # Fallback: Hard cut at max_len or end of string
+                        processed_sub_segments.append(slice_candidate.strip())
+                        cursor += len(slice_candidate)
+
+            # Log the transformation result
+            if len(processed_sub_segments) > 1 or (processed_sub_segments and processed_sub_segments[0] != segment):
+                 logger.info(f"Split large segment ({len(segment)} chars) into {len(processed_sub_segments)} parts: {processed_sub_segments}")
+
+            final_sentences.extend(processed_sub_segments)
 
         # Filter empty strings one last time
-        safe_sentences = [s for s in safe_sentences if s.strip()]
+        final_sentences = [s for s in final_sentences if s.strip()]
 
-        logger.info(f"Split text into {len(safe_sentences)} sage segments. and the segment is {safe_sentences}")
-        return safe_sentences
-
+        return final_sentences
 
 
     def __convert_to_16_bit_wav(self, data: NDArray[Any]) -> NDArray[Any]:
