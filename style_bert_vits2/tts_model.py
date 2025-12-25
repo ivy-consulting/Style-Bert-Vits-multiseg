@@ -171,7 +171,7 @@ class TTSModel:
         xvec = mean + (xvec - mean) * weight
         return xvec
     
-    def split_text_by_punctuation_and_newlines(self, text, max_len=150):
+    def split_text_by_punctuation_and_newlines(self, text, max_len=100):
         import re
         # Ensure logger is available if not imported globally
 
@@ -273,7 +273,7 @@ class TTSModel:
         # Filter empty strings one last time
         safe_sentences = [s for s in safe_sentences if s.strip()]
 
-        logger.debug(f"Split text into {len(safe_sentences)} segments.")
+        logger.info(f"Split text into {len(safe_sentences)} sage segments. and the segment is {safe_sentences}")
         return safe_sentences
 
 
