@@ -222,6 +222,27 @@ def authenticate_service(func):
 
     return wrapper
 
+class VoiceRequest(BaseModel):
+    text: str
+    encoding: Optional[str] = None
+    model_name: Optional[str] = None
+    model_id: int = 0
+    speaker_name: Optional[str] = None
+    speaker_id: int = 0
+    sdp_ratio: float = DEFAULT_SDP_RATIO
+    noise: float = DEFAULT_NOISE
+    noisew: float = DEFAULT_NOISEW
+    length: float = DEFAULT_LENGTH
+    language: str = "JP"  # Assuming 'ln' defaults to JP or similar
+    auto_split: bool = DEFAULT_LINE_SPLIT
+    split_interval: float = DEFAULT_SPLIT_INTERVAL
+    assist_text: Optional[str] = None
+    assist_text_weight: float = DEFAULT_ASSIST_TEXT_WEIGHT
+    style: Optional[str] = DEFAULT_STYLE
+    style_weight: float = DEFAULT_STYLE_WEIGHT
+    reference_audio_path: Optional[str] = None
+    improved_split: bool = False
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -308,11 +329,16 @@ if __name__ == "__main__":
             wav_write(buffer, sr, audio_segment)
             yield buffer.getvalue()
 
+    # 1. Define the Data Model for JSON Body Requests
+
+
     @app.api_route("/voice", methods=["GET", "POST"])
     @authenticate_service
     async def voice(
         request: Request,
-        text: str = Query(..., min_length=1, max_length=None, description="セリフ"),
+        # Allow JSON Body (Optional)
+        body: Optional[VoiceRequest] = Body(None),
+        text: str = Query(None, min_length=1, max_length=None, description="セリフ"),
         encoding: str = Query(None, description="textをURLデコードする(ex, `utf-8`)"),
         model_name: str = Query(
             None,
@@ -365,6 +391,40 @@ if __name__ == "__main__":
             False, description="分割時の音声の切れ目を改善する"
         ),
     ):
+        # --- [NEW] BODY OVERRIDE BLOCK ---
+        # If JSON body exists, overwrite the local variables with body values
+        if body:
+            # We use 'if body.x is not None' to ensure we don't accidentally wipe data
+            if body.text is not None: text = body.text
+            if body.encoding is not None: encoding = body.encoding
+            if body.model_name is not None: model_name = body.model_name
+            # For integers/floats, we trust the body's default (0 or defined value)
+            model_id = body.model_id 
+            
+            if body.speaker_name is not None: speaker_name = body.speaker_name
+            speaker_id = body.speaker_id
+            sdp_ratio = body.sdp_ratio
+            noise = body.noise
+            noisew = body.noisew
+            length = body.length
+            language = body.language
+            auto_split = body.auto_split
+            split_interval = body.split_interval
+            
+            if body.assist_text is not None: assist_text = body.assist_text
+            assist_text_weight = body.assist_text_weight
+            
+            if body.style is not None: style = body.style
+            style_weight = body.style_weight
+            
+            if body.reference_audio_path is not None: reference_audio_path = body.reference_audio_path
+            improved_split = body.improved_split
+        
+        # Final Safety Check: If text is STILL None (not in Body, not in URL)
+        if text is None:
+             raise HTTPException(status_code=422, detail="Field 'text' is required in Body or URL.")
+        # --------------------------------------
+
         """Stream text-to-speech audio incrementally (e.g., sentence by sentence)."""
         logger.info(
             f"{request.client.host}:{request.client.port}/voice  { unquote(str(request.query_params) )}"
