@@ -1,18 +1,21 @@
-# Dockerfile.deploy用の.dockerignore
-# 日本語のJP-Extraのエディター稼働のみに必要なファイルを指定する
-
+# Ignore everything by default to keep context small
 *
 
+# Allow directories
 !/style_bert_vits2/
-
-!/bert/deberta-v2-large-japanese-char-wwm/
+!/bert/
 !/configs/
-!/dict_data/default.csv
+!/dict_data/
 !/model_assets/
 !/static/
+!/Data/
 
+# Allow specific files
 !/config.py
 !/default_config.yml
 !/initialize.py
 !/requirements.txt
 !/server_editor.py
+!/server_fastapi.py
+!/app.py
+!/pyproject.toml

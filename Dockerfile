@@ -1,0 +1,53 @@
+# Stage 1: Builder (Compiles dependencies)
+# WE USE 'bullseye' HERE because it has FFmpeg 4.x, which av==10.0.0 requires.
+FROM python:3.10-slim-bullseye AS builder
+
+WORKDIR /app
+
+# 1. Install build tools and FFmpeg development libraries.
+# Added 'cmake' which is MANDATORY for compiling pyopenjtalk on Mac M1/M2
+RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     pkg-config     cmake     libavformat-dev     libavcodec-dev     libavdevice-dev     libavutil-dev     libswscale-dev     libswresample-dev     libavfilter-dev     git     && rm -rf /var/lib/apt/lists/*
+
+# 2. Upgrade pip and build tools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# 3. Install Cython < 3.0
+# PyAV 10.0.0 cannot build with Cython 3.0+.
+RUN pip install "Cython<3"
+
+# 4. Pre-install 'av'
+# We install it explicitly to ensure it uses the correct Cython and system libs.
+RUN pip install --no-build-isolation "av==10.0.0"
+
+# Fix: Compile pyopenjtalk from source to prevent M1/ARM64 crash
+RUN pip install --no-cache-dir --no-binary pyopenjtalk pyopenjtalk
+
+# 5. Install the rest of the dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Stage 2: Runtime (Production Image)
+FROM python:3.10-slim-bullseye
+
+WORKDIR /app
+
+# 6. Install runtime system dependencies (ffmpeg binary only)
+RUN apt-get update && apt-get install -y --no-install-recommends     ffmpeg     && rm -rf /var/lib/apt/lists/*
+
+# 7. Copy the compiled Python packages from the builder stage
+COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# 8. Setup a non-root user
+RUN useradd -m -u 1000 user
+RUN chown -R user:user /app  
+USER user
+
+# 9. Copy application source code
+COPY --chown=user . .
+
+# RUN python initialize.py
+
+# 10. Define Entrypoint
+EXPOSE 5000
+CMD ["python", "server_fastapi.py"]

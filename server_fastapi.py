@@ -56,7 +56,7 @@ nltk.download('averaged_perceptron_tagger_eng')
 pyopenjtalk.initialize_worker()
 
 # dict_data/ 以下の辞書データを pyopenjtalk に適用
-update_dict()
+# update_dict()
 
 # 事前に BERT モデル/トークナイザーをロードしておく
 ## ここでロードしなくても必要になった際に自動ロードされるが、時間がかかるため事前にロードしておいた方が体験が良い
